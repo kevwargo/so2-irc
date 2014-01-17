@@ -21,7 +21,7 @@ char ClientQueueName[NAME_MAX];
 
 static void QuitHandle(int signum)
 {
-    printf("\nquiting...\n");
+    /* printf("quiting...\n"); */
     Message msg;
     msg.type = DISCONNECT_MSG;
     msg.data.discmsg.cid = getpid();
