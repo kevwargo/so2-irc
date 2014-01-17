@@ -15,8 +15,8 @@ all:
 	make server
 	make client
 
-server: obj obj/server.o
-	${LD} ${LDFLAGS} obj/server.o -o server
+server: obj obj/server.o obj/utils.o
+	${LD} ${LDFLAGS} obj/server.o obj/utils.o -o server
 
 client: obj obj/client.o obj/prompt.o obj/utils.o
 	${LD} ${LDFLAGS} -lreadline -pthread obj/client.o obj/prompt.o obj/utils.o -o client
