@@ -23,13 +23,13 @@ static void QuitHandle(int signum)
 {
     printf("quiting...\n");
     if (mq_close(GlobalQueue) < 0)
-        perror("close global queue");
+        perror_die("close global queue");
     else
         if (mq_close(ClientQueue) < 0)
-            perror("close client queue");
+            perror_die("close client queue");
         else
             if (mq_unlink(ClientQueueName) < 0)
-                perror("unlink client queue");
+                perror_die("unlink client queue");
     exit(0);
 }
 
@@ -39,7 +39,7 @@ static void *queueListen(msgbuf)
     while (1)
     {
         if (mq_receive(ClientQueue, (char *)msgbuf, IRC_MSGSIZE, NULL) < 0)
-            perror("receive text message");
+            perror_die("receive text message");
         else
         {
             safePrintf("message from %d: %s\n", msgbuf->data.textmsg.cid,
@@ -52,7 +52,7 @@ int main(int argc, char **argv)
 {
     GlobalQueue = mq_open(COMMON_QUEUE_NAME, O_WRONLY);
     if (GlobalQueue < 0)
-        perror("open global queue");
+        perror_die("open global queue");
     else
     {
         int pid = getpid();
@@ -61,7 +61,7 @@ int main(int argc, char **argv)
                                  .mq_msgsize = IRC_MSGSIZE, .mq_curmsgs = 0 };
         ClientQueue = mq_open(ClientQueueName, O_RDONLY | O_CREAT, 0666, &attrs);
         if (ClientQueue < 0)
-            perror("open client queue");
+            perror_die("open client queue");
         else
         {
             Message msgbuf;
@@ -69,7 +69,7 @@ int main(int argc, char **argv)
             msgbuf.data.loginmsg.cid = pid;
             strcpy(msgbuf.data.loginmsg.queueName, ClientQueueName);
             if (mq_send(GlobalQueue, (char *)&msgbuf, sizeof(Message), 0) < 0)
-                perror("send client's queuename");
+                perror_die("send client's queuename");
             else
             {
                 initializePrompt();
@@ -99,7 +99,7 @@ int main(int argc, char **argv)
                     msgbuf.data.textmsg.cid = pid;
                     strcpy(msgbuf.data.textmsg.text, string);
                     if (mq_send(GlobalQueue, (char *)&msgbuf, sizeof(Message), 0) < 0)
-                        perror("send text message");
+                        perror_die("send text message");
                     free(string);
                 }
                 QuitHandle(0);

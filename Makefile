@@ -5,7 +5,7 @@ CFLAGS=-c -march=native --std=c99 -pthread -Iinclude -D_POSIX_C_SOURCE=200809L -
 
 LDFLAGS=-lrt
 
-FILES=server client prompt
+FILES=server client prompt utils
 
 SRC=$(addprefix src/, $(addsuffix .c, $(FILES)))
 OBJ=$(addprefix obj/, $(addsuffix .o, $(FILES)))
@@ -18,8 +18,8 @@ all:
 server: obj obj/server.o
 	${LD} ${LDFLAGS} obj/server.o -o server
 
-client: obj obj/client.o obj/prompt.o
-	${LD} ${LDFLAGS} -lreadline -pthread obj/client.o obj/prompt.o -o client
+client: obj obj/client.o obj/prompt.o obj/utils.o
+	${LD} ${LDFLAGS} -lreadline -pthread obj/client.o obj/prompt.o obj/utils.o -o client
 
 obj:
 	mkdir obj

@@ -5,5 +5,6 @@
 #include <stdlib.h>
 
 extern void Randomize();
+extern void perror_die(char *msg);
 
 #endif
