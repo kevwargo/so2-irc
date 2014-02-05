@@ -11,7 +11,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <pthread.h>
-#include "chat_common.h"
+#include "protocol.h"
 #include "utils.h"
 #include "prompt.h"
 
@@ -19,9 +19,9 @@ mqd_t GlobalQueue;
 mqd_t ClientQueue;
 char ClientQueueName[NAME_MAX];
 
-static void QuitHandle(int signum)
+static void quit(int signum)
 {
-    /* printf("quiting...\n"); */
+    printf("quiting...\n");
     Message msg;
     msg.type = DISCONNECT_MSG;
     msg.data.discmsg.cid = getpid();
@@ -29,10 +29,10 @@ static void QuitHandle(int signum)
         perror("send disconnect message");
     if (mq_close(ClientQueue) < 0)
         perror("close client queue");
-    if (mq_close(GlobalQueue) < 0)
-        perror_die("close global queue");
     if (mq_unlink(ClientQueueName) < 0)
-        perror_die("unlink client queue");
+        perror("unlink client queue");
+    if (mq_close(GlobalQueue) < 0)
+        perror("close global queue");
     exit(0);
 }
 
@@ -67,8 +67,8 @@ int main(int argc, char **argv)
     if (mq_send(GlobalQueue, (char *)&msgbuf, sizeof(Message), 0) < 0)
         perror_die("send client's queuename");
     initializePrompt();
-    signal(SIGINT, QuitHandle);
-    /* signal(SIGSEGV, QuitHandle); */
+    signal(SIGINT, quit);
+    /* signal(SIGSEGV, quit); */
     pthread_t queueListenerThread;
     /* odpala wątek, który czeka na wiadomości z kolejki */
     pthread_create(&queueListenerThread, NULL, queueListen, &msgbuf);
@@ -96,6 +96,6 @@ int main(int argc, char **argv)
             perror("send text message");
         free(string);
     }
-    QuitHandle(0);
+    quit(0);
     pthread_exit(NULL);
 }
