@@ -1,12 +1,12 @@
-#ifndef __CHAT_COMMON_H_DEFINED_
-#define __CHAT_COMMON_H_DEFINED_
+#ifndef __PROTOCOL_H_DEFINED_
+#define __PROTOCOL_H_DEFINED_
 
 
 #define IRC_MSGSIZE 2048
 #define IRC_MAXTEXTSIZE IRC_MSGSIZE - sizeof(int)*2 - sizeof(char)*MAX_USR_NAME
 #define MAX_USR_NAME 50
-#define COMMON_QUEUE_NAME "/irc-commmon-queue"
-#define CLIENT_QUEUE_NAME_FORMAT "/irc-client-%d"
+#define COMMON_QUEUE_NAME "/irc-server-queue"
+#define CLIENT_QUEUE_NAME_FORMAT "/irc-client-%d-queue"
 
 enum MessageType
 {
@@ -21,11 +21,6 @@ enum MessageType
     SEND_CHANNEL_MSG, // wyslanie wiadomosci na kanal
     SHOW_USERS, // wyswietla liste uzytkownikow
     SHOW_CHANNELS // wyswietla liste kanalow
-};
-
-enum Bool{
-    no = 0,
-    yes
 };
 
 //struktura wiadomosci dla logowania
@@ -46,7 +41,7 @@ typedef struct LoginMessage
 typedef struct ConfirmationMessage
 {
     int cid;
-    enum Bool confirmed;
+    int confirmed;
     char text[IRC_MAXTEXTSIZE];
 } ConfirmationMessage;
 
