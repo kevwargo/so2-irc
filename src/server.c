@@ -583,9 +583,19 @@ static void handleServerCommand(Message *msgbuf)
         showInvitations(msgbuf);
     else
     {
+        Client *client = getClientById(ClientList, msgbuf->data.srvmsg.cid);
         printf("unknown command %s\n", cmd);
-        /* cmd = strdup(cmd); */
-        
+        cmd = strdup(cmd);
+        sprintf(msgbuf->data.confmsg.text,
+                "Server does not support command %s\n", cmd);
+        msgbuf->type = CONFIRM_MSG;
+        msgbuf->data.confmsg.confirmed = 0;
+        free(cmd);
+        if (mq_send(client->mqdes, (char *)msgbuf, sizeof(Message), 0) < 0)
+            perror("send server message confirmation");
+        else
+            printf("server msg confirmation sent successfully to %d\n",
+                   msgbuf->data.srvmsg.cid);
     }
 }
 
