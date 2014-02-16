@@ -50,12 +50,18 @@ static void *queueListen(void *arg)
         switch (message.type)
         {
             case CONFIRM_MSG:
-                safePrintf("confirm message (%s): <%s>\n",
+                safePrintf("confirm message (%s): %s\n",
                            message.data.confmsg.confirmed ? "success" : "fail",
                            message.data.confmsg.text);
                 break;
             case SRV_MSG:
                 safePrintf("server message: %s\n", message.data.srvmsg.text);
+                break;
+            case SHOW_USERS:
+                safePrintf("on-line users:\n%s\n", message.data.srvmsg.text);
+                break;
+            case SHOW_CHANNELS:
+                safePrintf("all channels:\n%s\n", message.data.srvmsg.text);
                 break;
             case INFO_MSG:
                 safePrintf("info: %s\n", message.data.srvmsg.text);
@@ -167,6 +173,16 @@ static void joinChannel(Message *msgbuf, char *msg)
     /* return 1; */
 }
 
+static void leaveChannel(Message *msgbuf)
+{
+    msgbuf->type = LEAVE_CHANNEL_MSG;
+    msgbuf->data.chmsg.cid = getpid();
+    if (mq_send(GlobalQueue, (char *)msgbuf, sizeof(Message), 0) < 0)
+        perror("send leave channel message");
+    else
+        printf("leave channel message sent successfully\n");
+}
+
 static void showUsers(Message *msgbuf)
 {
     msgbuf->type = SHOW_USERS;
@@ -234,9 +250,10 @@ static void serverMessage(Message *msgbuf, char *command)
 static void showHelp()
 {
     printf("quit, exit\n");
-    printf("sendch <msg> - send msg to channel\n");
-    printf("priv <user> <msg> - send private msg to <user>\n");
+    printf("chmsg <msg> - send msg to channel\n");
+    printf("privmsg <user> <msg> - send private msg to <user>\n");
     printf("join <channel>\n");
+    printf("leave - leave current channel\n");
     printf("users - show users currently logged in\n");
     printf("channels - show all channels\n");
     printf("info - show additional commands which server can handle\n");
@@ -254,13 +271,15 @@ static void parseCommand(char *cmdstr, Message *msgbuf)
     }
     // here comes actual command parsing
     if (*cmdstr == '\0') // empty string, do nothing
-    {}
-    else if (strncmp(cmdstr, "sendch ", 7) == 0)
-        sendChannelMessage(msgbuf, cmdstr + 7);
-    else if (strncmp(cmdstr, "priv ", 5) == 0)
-        sendPrivateMessage(msgbuf, cmdstr + 5);
+        return;
+    if (strncmp(cmdstr, "chmsg ", 6) == 0)
+        sendChannelMessage(msgbuf, cmdstr + 6);
+    else if (strncmp(cmdstr, "privmsg ", 8) == 0)
+        sendPrivateMessage(msgbuf, cmdstr + 8);
     else if (strncmp(cmdstr, "join ", 5) == 0)
         joinChannel(msgbuf, cmdstr + 5);
+    else if (strcmp(cmdstr, "leave") == 0)
+        leaveChannel(msgbuf);
     else if (strcmp(cmdstr, "users") == 0)
         showUsers(msgbuf);
     else if (strcmp(cmdstr, "channels") == 0)

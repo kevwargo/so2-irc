@@ -110,6 +110,12 @@ static void clearChannelList(Channel **chlptr)
             free(cep);
             cep = next;
         }
+        for (ClientEntry *cep = (*chpp)->invited; cep; )
+        {
+            ClientEntry *next = cep->next;
+            free(cep);
+            cep = next;
+        }
         free(*chpp);
         chpp = nextptr;
     }
@@ -162,6 +168,11 @@ static void handleLogin(Message *msgbuf)
     int confirmed = 1;
     char *cqname = msgbuf->data.loginmsg.queueName;
     mqd_t cmqdes = mq_open(cqname, O_WRONLY);
+    if (cmqdes < 0)
+    {
+        perror("open client queue");
+        return;
+    }
     for (Client *cp = ClientList; cp; cp = cp->next)
         if (strcmp(name, cp->name) == 0)
         {
@@ -171,11 +182,6 @@ static void handleLogin(Message *msgbuf)
                     "Name %s is already in use, choose other one\n", name);
             break;
         }
-    if (cmqdes < 0)
-    {
-        perror("open client queue");
-        return;
-    }
     msgbuf->type = CONFIRM_MSG;
     msgbuf->data.confmsg.confirmed = confirmed;
     if (confirmed)
@@ -210,7 +216,7 @@ static void handleInfo(Message *msgbuf)
 {
     int cid = msgbuf->data.srvmsg.cid;
     printf("info request from %d\n", cid);
-    strcpy(msgbuf->data.srvmsg.text, "List of available server commands:\ninvite <user> <channel>\nbla-bla-bla\n");
+    strcpy(msgbuf->data.srvmsg.text, "List of available server commands:\nprivjoin <channel> - join (or create if doesn't exist) private channel\ninvite <user> <channel>\ninvitations - print all private channels you're invited in\n");
     mqd_t cmqd = getClientById(ClientList, cid)->mqdes;
     if (mq_send(cmqd, (char *)msgbuf, sizeof(Message), 0) < 0)
         perror("send info message to client");
@@ -218,7 +224,20 @@ static void handleInfo(Message *msgbuf)
         printf("info msg sent successfully to %d\n", cid);
 }
 
-static void handleJoinChannel(Message *msgbuf)
+static void addClientToInvited(Channel *channel, int cid)
+{
+    if (! channel)
+        return;
+    ClientEntry **cepp = &(channel->invited);
+    for (; *cepp; cepp = &((*cepp)->next))
+        if ((*cepp)->cid == cid)
+            return;
+    *cepp = (ClientEntry *)malloc(sizeof(ClientEntry));
+    (*cepp)->cid = cid;
+    (*cepp)->next = NULL;
+}
+
+static void handleJoinChannel(Message *msgbuf, int private)
 {
     int cid = msgbuf->data.chmsg.cid;
     Client *client = getClientById(ClientList, cid);
@@ -227,13 +246,15 @@ static void handleJoinChannel(Message *msgbuf)
     int confirmed = 1;
     if (! channel)
     {
-        addChannel(&ChannelList, msgbuf->data.chmsg.channel_name, 0);
+        addChannel(&ChannelList, msgbuf->data.chmsg.channel_name, private);
         channel = getChannelByName(ChannelList, msgbuf->data.chmsg.channel_name);
-        printf("created new channel %s\n", channel->name);
+        if (private)
+            addClientToInvited(channel, cid);
+        printf("created new %schannel %s\n", private ? "private " : "", channel->name);
     }
     if (channel->private)
     {
-        ClientEntry *cep = channel->clients;
+        ClientEntry *cep = channel->invited;
         for (; cep; cep = cep->next)
             if (cep->cid == cid)
             {
@@ -254,21 +275,31 @@ static void handleJoinChannel(Message *msgbuf)
     {
         if (client->channel && strcmp(client->channel, channel->name) != 0)
         {
+            Channel *oldchannel = getChannelByName(ChannelList, client->channel);
             printf("client %d removed from channel %s\n", cid, client->channel);
-            removeClientFromChannel(channel, cid);
+            removeClientFromChannel(oldchannel, cid);
             free(client->channel);
             client->channel = NULL;
             msgbuf->data.confmsg.confirmed = 1;
-            sprintf(msgbuf->data.confmsg.text, "Logged out from %s\n", channel->name);
+            sprintf(msgbuf->data.confmsg.text, "Logged out from %s\n",
+                    oldchannel->name);
             if (mq_send(client->mqdes, (char *)msgbuf, sizeof(Message), 0) < 0)
                 perror("send leave channel confirmation (before join)");
             else
                 printf("leave channel confirmation (before join) sent successfully to %d\n", cid);
         }
-        client->channel = strdup(channel->name);
-        addClientToChannel(channel, cid);
-        printf("added client %d to channel %s\n", cid, channel->name);
-        sprintf(msgbuf->data.confmsg.text, "Joined channel %s\n", channel->name);
+        if (client->channel)
+            sprintf(msgbuf->data.confmsg.text,
+                    "You're already connected to %s\n", client->channel);
+        else
+        {
+            client->channel = strdup(channel->name);
+            addClientToChannel(channel, cid);
+            printf("added client %d to %schannel %s\n",
+                   cid, private ? "private " : "", channel->name);
+            sprintf(msgbuf->data.confmsg.text, "Joined %schannel %s\n",
+                    channel->private ? "private " : "", channel->name);
+        }
     }
     msgbuf->data.confmsg.confirmed = confirmed;
     if (mq_send(client->mqdes, (char *)msgbuf, sizeof(Message), 0) < 0)
@@ -308,7 +339,7 @@ static void handleSendPrivateMessage(Message *msgbuf)
 {
     int cid = msgbuf->data.textmsg.cid;
     Client *sender = getClientById(ClientList, cid);
-    char *tgtname = msgbuf->data.textmsg.name;
+    char *tgtname = strdup(msgbuf->data.textmsg.name);
     Client *target = NULL;
     int confirmed = 1;
     for (Client *cp = ClientList; cp; cp = cp->next)
@@ -322,9 +353,7 @@ static void handleSendPrivateMessage(Message *msgbuf)
     {
         printf("ERROR: no such client: %s\n", tgtname);
         confirmed = 0;
-        msgbuf->data.confmsg.text[0] = '\0';
-        sprintf(msgbuf->data.confmsg.text, "No such useeer: %s\n", tgtname);
-        printf(" >> %s", msgbuf->data.confmsg.text);
+        sprintf(msgbuf->data.confmsg.text, "No such user: %s", tgtname);
     }
     else
     {
@@ -344,6 +373,7 @@ static void handleSendPrivateMessage(Message *msgbuf)
                     "Successfully sent priv msg to %s\n", tgtname);
         }
     }
+    free(tgtname);
     msgbuf->type = CONFIRM_MSG;
     msgbuf->data.confmsg.confirmed = confirmed;
     if (mq_send(sender->mqdes, (char *)msgbuf, sizeof(Message), 0) < 0)
@@ -394,14 +424,13 @@ static void handleShowUsers(Message *msgbuf)
 {
     int cid = msgbuf->data.srvmsg.cid;
     Client *client = getClientById(ClientList, cid);
-    msgbuf->type = SRV_MSG;
     msgbuf->data.srvmsg.text[0] = '\0';
     char *buffer = (char *)malloc(1024);
     for (Client *cp = ClientList; cp; cp = cp->next)
     {
         strcat(msgbuf->data.srvmsg.text, cp->name);
         strcpy(buffer, "\n");
-        if (cp->channel)
+        if (cp->channel && ! getChannelByName(ChannelList, cp->channel)->private)
             sprintf(buffer, " (on channel %s)\n", cp->channel);
         strcat(msgbuf->data.srvmsg.text, buffer);
     }
@@ -416,11 +445,12 @@ static void handleShowChannels(Message *msgbuf)
 {
     int cid = msgbuf->data.srvmsg.cid;
     Client *client = getClientById(ClientList, cid);
-    msgbuf->type = SRV_MSG;
     msgbuf->data.srvmsg.text[0] = '\0';
     char *buffer = (char *)malloc(1024);
     for (Channel *chp = ChannelList; chp; chp = chp->next)
     {
+        if (chp->private)
+            continue;
         strcat(msgbuf->data.srvmsg.text, chp->name);
         if (chp->clients)
         {
@@ -444,10 +474,119 @@ static void handleShowChannels(Message *msgbuf)
         printf("channels stats successfully sent to %d\n", cid);
 }
 
+/* SPECIAL SERVER COMMANDS */
+
+static void inviteClientToPrivateChannel(Message *msgbuf, char *username)
+{
+    username = strdup(username);
+    int cid = msgbuf->data.srvmsg.cid;
+    Client *sender = getClientById(ClientList, cid);
+    msgbuf->type = CONFIRM_MSG;
+    msgbuf->data.confmsg.confirmed = 0;
+    if (! sender->channel)
+    {
+        printf("client %d not connected to any channel, so can't invite\n", cid);
+        sprintf(msgbuf->data.confmsg.text,
+                "To invite other users to your channel, first connect to some\n");
+    }
+    else
+    {
+        Channel *channel = getChannelByName(ChannelList, sender->channel);
+        if (! channel->private)
+        {
+            printf("channel %s is not private\n", channel->name);
+            sprintf(msgbuf->data.confmsg.text,
+                    "Your current channel (%s) is not private\n", channel->name);
+        }
+        else
+        {
+            Client *client = NULL;
+            for (Client *cp = ClientList; cp; cp = cp->next)
+                if (strcmp(cp->name, username) == 0)
+                    client = cp;
+            if (! client)
+            {
+                printf("no such client to invite: %s\n", username);
+                sprintf(msgbuf->data.confmsg.text, "No such user by name %s\n", username);
+            }
+            else
+            {
+                msgbuf->data.confmsg.confirmed = 1;
+                addClientToInvited(channel, client->id);
+                sprintf(msgbuf->data.confmsg.text,
+                        "You've been invited to private channel %s\n", channel->name);
+                if (mq_send(client->mqdes, (char *)msgbuf, sizeof(Message), 0) < 0)
+                    perror("send info that someone was invited");
+                else
+                    printf("%d was successfully informed about invitation to %s\n",
+                           client->id, channel->name);
+                sprintf(msgbuf->data.confmsg.text,
+                        "User %d successfully invited to %s\n",
+                        client->id, channel->name);
+            }
+        }
+    }
+    free(username);
+    if (mq_send(sender->mqdes, (char *)msgbuf, sizeof(Message), 0) < 0)
+        perror("send invite confirmation");
+    else
+        printf("invite confirmation sent successfully to %d\n", sender->id);
+}
+
+static void showInvitations(Message *msgbuf)
+{
+    int cid = msgbuf->data.srvmsg.cid;
+    Client *client = getClientById(ClientList, cid);
+    char *buffer = (char *)malloc(1024);
+    buffer[0] = '\0';
+    for (Channel *chp = ChannelList; chp; chp = chp->next)
+        if (chp->private)
+            for (ClientEntry *cep = chp->invited; cep; cep = cep->next)
+                if (cep->cid == cid)
+                {
+                    strcat(buffer, chp->name);
+                    strcat(buffer, ", ");
+                }
+    if (buffer[0])
+    {
+        sprintf(msgbuf->data.srvmsg.text,
+                "Private channels you're invited in: %s\n", buffer);
+        // removing trailing ", "
+        int len = strlen(msgbuf->data.srvmsg.text);
+        msgbuf->data.srvmsg.text[len - 3] = '\0';
+    }
+    else
+        sprintf(msgbuf->data.srvmsg.text, "You're not invited to any private channel\n");
+    msgbuf->type = SRV_MSG;
+    if (mq_send(client->mqdes, (char *)msgbuf, sizeof(Message), 0) < 0)
+        perror("send invitations");
+    else
+        printf("invitations sent successfully to %d\n", cid);
+}
+
+/* END SPECIAL SERVER COMMANDS */
+
 static void handleServerCommand(Message *msgbuf)
 {
-    printf("server command request from %d: %s\n", msgbuf->data.srvmsg.cid,
-           msgbuf->data.srvmsg.text);
+    char *cmd = msgbuf->data.srvmsg.text;
+    if (strncmp(cmd, "privjoin ", 9) == 0)
+    {
+        msgbuf->data.chmsg.cid = msgbuf->data.srvmsg.cid;
+        char *chname = strdup(cmd + 9);
+        strcpy(msgbuf->data.chmsg.channel_name, chname);
+        free(chname);
+        handleJoinChannel(msgbuf, 1);
+    }
+    else if (strncmp(cmd, "invite ", 7) == 0)
+        inviteClientToPrivateChannel(msgbuf, cmd + 7);
+    else if (strcmp(cmd, "invitations") == 0)
+        showInvitations(msgbuf);
+    else
+    {
+        printf("unknown command %s\n", cmd);
+        /* cmd = strdup(cmd); */
+        
+    }
 }
 
 /* END MESSAGE HANDLERS SECTION */
@@ -511,7 +650,7 @@ int main(int argc, char **argv)
                 handleServerCommand(&message);
                 break;
             case JOIN_CHANNEL_MSG:
-                handleJoinChannel(&message);
+                handleJoinChannel(&message, 0);
                 break;
             case LEAVE_CHANNEL_MSG:
                 handleLeaveChannel(&message);
