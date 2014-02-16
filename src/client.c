@@ -50,7 +50,7 @@ static void *queueListen(void *arg)
         switch (message.type)
         {
             case CONFIRM_MSG:
-                safePrintf("confirm message (%s): %s\n",
+                safePrintf("confirm message (%s): <%s>\n",
                            message.data.confmsg.confirmed ? "success" : "fail",
                            message.data.confmsg.text);
                 break;
@@ -71,7 +71,7 @@ static void *queueListen(void *arg)
     }
 }
 
-static int sendChannelMessage(Message *msgbuf, char *msg)
+static void sendChannelMessage(Message *msgbuf, char *msg)
 {
     msgbuf->type = SEND_CHANNEL_MSG;
     msgbuf->data.textmsg.cid = getpid();
@@ -79,7 +79,8 @@ static int sendChannelMessage(Message *msgbuf, char *msg)
     if (! text)
     {
         safePrintf("no message to send to channel\n");
-        return 0;
+        return;
+        /* return 0; */
     }
     if (strlen(text) >= IRC_MAXTEXTSIZE)
     {
@@ -92,13 +93,14 @@ static int sendChannelMessage(Message *msgbuf, char *msg)
     if (mq_send(GlobalQueue, (char *)msgbuf, sizeof(Message), 0) < 0)
     {
         perror("send channel message");
-        return 0;
+        return;
+        /* return 0; */
     }
     safePrintf("channel msg sent successfully\n");
-    return 1;
+    /* return 1; */
 }
 
-static int sendPrivateMessage(Message *msgbuf, char *msg)
+static void sendPrivateMessage(Message *msgbuf, char *msg)
 {
     msgbuf->type = SEND_USER_MSG;
     msgbuf->data.textmsg.cid = getpid();
@@ -106,13 +108,15 @@ static int sendPrivateMessage(Message *msgbuf, char *msg)
     if (! username)
     {
         safePrintf("no user name\n");
-        return 0;
+        return;
+        /* return 0; */
     }
     char *text = strtok(NULL, " 	");
     if (! text)
     {
         safePrintf("no text to user\n");
-        return 0;
+        return;
+        /* return 0; */
     }
     safePrintf("args to sendusr: \"%s\" \"%s\"\n", username, text);
     strcpy(msgbuf->data.textmsg.name, username);
@@ -127,13 +131,14 @@ static int sendPrivateMessage(Message *msgbuf, char *msg)
     if (mq_send(GlobalQueue, (char *)msgbuf, sizeof(Message), 0) < 0)
     {
         perror("send private message");
-        return 0;
+        return;
+        /* return 0; */
     }
     safePrintf("private msg sent successfully\n");
-    return 1;
+    /* return 1; */
 }
 
-static int joinChannel(Message *msgbuf, char *msg)
+static void joinChannel(Message *msgbuf, char *msg)
 {
     msgbuf->type = JOIN_CHANNEL_MSG;
     msgbuf->data.chmsg.cid = getpid();
@@ -141,7 +146,8 @@ static int joinChannel(Message *msgbuf, char *msg)
     if (! channel)
     {
         safePrintf("no channel name\n");
-        return 0;
+        return;
+        /* return 0; */
     }
     if (strlen(channel) >= MAX_USR_NAME)
     {
@@ -154,52 +160,56 @@ static int joinChannel(Message *msgbuf, char *msg)
     if (mq_send(GlobalQueue, (char *)msgbuf, sizeof(Message), 0) < 0)
     {
         perror("join channel");
-        return 0;
+        return;
+        /* return 0; */
     }
     safePrintf("successfully joined channel %s\n", channel);
-    return 1;
+    /* return 1; */
 }
 
-static int showUsers(Message *msgbuf)
+static void showUsers(Message *msgbuf)
 {
     msgbuf->type = SHOW_USERS;
     msgbuf->data.srvmsg.cid = getpid();
     if (mq_send(GlobalQueue, (char *)msgbuf, sizeof(Message), 0) < 0)
     {
         perror("send show users");
-        return 0;
+        return;
+        /* return 0; */
     }
     safePrintf("successfully sent show users request\n");
-    return 1;
+    /* return 1; */
 }
 
-static int showChannels(Message *msgbuf)
+static void showChannels(Message *msgbuf)
 {
     msgbuf->type = SHOW_CHANNELS;
     msgbuf->data.srvmsg.cid = getpid();
     if (mq_send(GlobalQueue, (char *)msgbuf, sizeof(Message), 0) < 0)
     {
         perror("send show channels");
-        return 0;
+        return;
+        /* return 0; */
     }
     safePrintf("successfully sent show channels request\n");
-    return 1;
+    /* return 1; */
 }
 
-static int requestInfo(Message *msgbuf)
+static void requestInfo(Message *msgbuf)
 {
     msgbuf->type = INFO_MSG;
     msgbuf->data.srvmsg.cid = getpid();
     if (mq_send(GlobalQueue, (char *)msgbuf, sizeof(Message), 0) < 0)
     {
         perror("send info request");
-        return 0;
+        return;
+        /* return 0; */
     }
     safePrintf("successfully sent info request\n");
-    return 1;
+    /* return 1; */
 }
 
-static int serverMessage(Message *msgbuf, char *command)
+static void serverMessage(Message *msgbuf, char *command)
 {
     msgbuf->type = SRV_MSG;
     msgbuf->data.srvmsg.cid = getpid();
@@ -214,13 +224,26 @@ static int serverMessage(Message *msgbuf, char *command)
     if (mq_send(GlobalQueue, (char *)msgbuf, sizeof(Message), 0) < 0)
     {
         perror("send server command");
-        return 0;
+        return;
+        /* return 0; */
     }
     safePrintf("successfully sent server command\n");
-    return 1;
+    /* return 1; */
 }
 
-static int parseCommand(char *cmdstr, Message *msgbuf)
+static void showHelp()
+{
+    printf("quit, exit\n");
+    printf("sendch <msg> - send msg to channel\n");
+    printf("priv <user> <msg> - send private msg to <user>\n");
+    printf("join <channel>\n");
+    printf("users - show users currently logged in\n");
+    printf("channels - show all channels\n");
+    printf("info - show additional commands which server can handle\n");
+    printf("help - shows this help\n");
+}
+
+static void parseCommand(char *cmdstr, Message *msgbuf)
 {
     if (! cmdstr || // EOF
         strcmp(cmdstr, "quit") == 0 || strcmp(cmdstr, "exit") == 0)
@@ -230,37 +253,39 @@ static int parseCommand(char *cmdstr, Message *msgbuf)
         quit(0);
     }
     // here comes actual command parsing
-    int res;
-    if (strncmp(cmdstr, "sendch ", 7) == 0)
-        res = sendChannelMessage(msgbuf, cmdstr + 7);
+    if (*cmdstr == '\0') // empty string, do nothing
+    {}
+    else if (strncmp(cmdstr, "sendch ", 7) == 0)
+        sendChannelMessage(msgbuf, cmdstr + 7);
     else if (strncmp(cmdstr, "priv ", 5) == 0)
-        res = sendPrivateMessage(msgbuf, cmdstr + 5);
+        sendPrivateMessage(msgbuf, cmdstr + 5);
     else if (strncmp(cmdstr, "join ", 5) == 0)
-        res = joinChannel(msgbuf, cmdstr + 5);
+        joinChannel(msgbuf, cmdstr + 5);
     else if (strcmp(cmdstr, "users") == 0)
-        res = showUsers(msgbuf);
+        showUsers(msgbuf);
     else if (strcmp(cmdstr, "channels") == 0)
-        res = showChannels(msgbuf);
+        showChannels(msgbuf);
     else if (strcmp(cmdstr, "info") == 0)
-        res = requestInfo(msgbuf);
+        requestInfo(msgbuf);
+    else if (strcmp(cmdstr, "help") == 0)
+        showHelp();
     else
-        res = serverMessage(msgbuf, cmdstr);
+        serverMessage(msgbuf, cmdstr);
     free(cmdstr);
-    return res;
 }
 
 int main(int argc, char **argv)
 {
-    GlobalQueue = mq_open("/irc-commmon-queue", O_WRONLY);
-    /* GlobalQueue = mq_open(COMMON_QUEUE_NAME, O_WRONLY); */
+    /* GlobalQueue = mq_open("/irc-commmon-queue", O_WRONLY); */
+    GlobalQueue = mq_open(COMMON_QUEUE_NAME, O_WRONLY);
     if (GlobalQueue < 0)
     {        
         perror("open global queue");
         quit(0);
     }
     int pid = getpid();
-    /* sprintf(ClientQueueName, CLIENT_QUEUE_NAME_FORMAT, pid); */
-    sprintf(ClientQueueName, "/irc-client-%d", pid);
+    sprintf(ClientQueueName, CLIENT_QUEUE_NAME_FORMAT, pid);
+    /* sprintf(ClientQueueName, "/irc-client-%d", pid); */
     struct mq_attr attrs = { .mq_flags = 0, .mq_maxmsg = 10,
                              .mq_msgsize = IRC_MSGSIZE, .mq_curmsgs = 0 };
     ClientQueue = mq_open(ClientQueueName, O_RDONLY | O_CREAT, 0666, &attrs);
@@ -300,6 +325,8 @@ int main(int argc, char **argv)
                 if (message.data.confmsg.confirmed)
                     break;
                 username = readline("Choose other name: ");
+                if (! username)
+                    quit(0);
                 strcpy(message.data.loginmsg.name, username);
                 free(username);
             }

@@ -4,8 +4,25 @@
 typedef struct Client
 {
     int id;
-    int mqdes;
+    mqd_t mqdes;
+    char *name;
+    char *channel;
     struct Client *next;
 } Client;
+
+typedef struct ClientEntry
+{
+    int cid;
+    struct ClientEntry *next;
+} ClientEntry;
+
+typedef struct Channel
+{
+    char *name;
+    ClientEntry *clients;
+    char private;
+    ClientEntry *invited;
+    struct Channel *next;
+} Channel;
 
 #endif

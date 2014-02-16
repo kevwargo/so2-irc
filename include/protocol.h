@@ -5,8 +5,8 @@
 #define IRC_MSGSIZE 2048
 #define IRC_MAXTEXTSIZE IRC_MSGSIZE - sizeof(int)*2 - sizeof(char)*MAX_USR_NAME
 #define MAX_USR_NAME 50
-#define COMMON_QUEUE_NAME "/irc-server-queue"
-#define CLIENT_QUEUE_NAME_FORMAT "/irc-client-%d-queue"
+#define COMMON_QUEUE_NAME "/irc-commmon-queue"
+#define CLIENT_QUEUE_NAME_FORMAT "/irc-client-%d"
 
 enum MessageType
 {
