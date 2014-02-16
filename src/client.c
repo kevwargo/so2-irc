@@ -20,6 +20,7 @@ mqd_t GlobalQueue;
 mqd_t ClientQueue;
 char ClientQueueName[NAME_MAX];
 
+/* Zwalnia zasoby i kończy pracę. Jest wywoływana przy przerwaniu z klawiatury */
 static void quit(int signum)
 {
     printf("quiting...\n");
@@ -37,6 +38,7 @@ static void quit(int signum)
     exit(signum);
 }
 
+/* Ta funkcja jest odpalana w osobnym wątku i czeka na wiadomości z kolejki */
 static void *queueListen(void *arg)
 {
     while (1)
@@ -77,6 +79,7 @@ static void *queueListen(void *arg)
     }
 }
 
+/* Wysyła wiadomość na kanał */
 static void sendChannelMessage(Message *msgbuf, char *msg)
 {
     msgbuf->type = SEND_CHANNEL_MSG;
@@ -106,6 +109,7 @@ static void sendChannelMessage(Message *msgbuf, char *msg)
     /* return 1; */
 }
 
+/* Wysyła prywatną wiadomość do innego użytkownika */
 static void sendPrivateMessage(Message *msgbuf, char *msg)
 {
     msgbuf->type = SEND_USER_MSG;
@@ -144,6 +148,7 @@ static void sendPrivateMessage(Message *msgbuf, char *msg)
     /* return 1; */
 }
 
+/* Wysyła zapytanie o dołączeniu do kanału */
 static void joinChannel(Message *msgbuf, char *msg)
 {
     msgbuf->type = JOIN_CHANNEL_MSG;
@@ -173,6 +178,7 @@ static void joinChannel(Message *msgbuf, char *msg)
     /* return 1; */
 }
 
+/* Wysyła zapytanie o wylogowaniu się z kanału */
 static void leaveChannel(Message *msgbuf)
 {
     msgbuf->type = LEAVE_CHANNEL_MSG;
@@ -183,6 +189,7 @@ static void leaveChannel(Message *msgbuf)
         printf("leave channel message sent successfully\n");
 }
 
+/* Wysyła zapytanie o listę zalogowanych użytkowników */
 static void showUsers(Message *msgbuf)
 {
     msgbuf->type = SHOW_USERS;
@@ -197,6 +204,7 @@ static void showUsers(Message *msgbuf)
     /* return 1; */
 }
 
+/* Wysyła zapytanie o listę kanałów */
 static void showChannels(Message *msgbuf)
 {
     msgbuf->type = SHOW_CHANNELS;
@@ -211,6 +219,7 @@ static void showChannels(Message *msgbuf)
     /* return 1; */
 }
 
+/* Wysyła zapytanie o dodatkowej funkcjonalności serwera */
 static void requestInfo(Message *msgbuf)
 {
     msgbuf->type = INFO_MSG;
@@ -225,6 +234,7 @@ static void requestInfo(Message *msgbuf)
     /* return 1; */
 }
 
+/* Wysyła do serwera wiadomość tekstową, która utrzymuje polecenie */
 static void serverMessage(Message *msgbuf, char *command)
 {
     msgbuf->type = SRV_MSG;
@@ -247,6 +257,7 @@ static void serverMessage(Message *msgbuf, char *command)
     /* return 1; */
 }
 
+/* Wyświetla polecenia, wspierane przez program. Wszystkie inne polecenia są w formie tekstowej do serwera */
 static void showHelp()
 {
     printf("quit, exit\n");
@@ -260,6 +271,7 @@ static void showHelp()
     printf("help - shows this help\n");
 }
 
+/* Rozczytuje polecenie, podane z klawiatury */
 static void parseCommand(char *cmdstr, Message *msgbuf)
 {
     if (! cmdstr || // EOF
