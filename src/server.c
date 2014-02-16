@@ -19,6 +19,7 @@ Channel *ChannelList = NULL;
 
 /* CLIENT LIST SECTION */
 
+/* Dodaje klienta do listy jednokierunkowej */
 static void addClient(Client **clptr, int id, int mqdes, char *name)
 {
     if (! clptr)
@@ -35,6 +36,7 @@ static void addClient(Client **clptr, int id, int mqdes, char *name)
     (*cpp)->next = NULL;
 }
 
+/* Usuwa klienta z listy */
 static void removeClient(Client **clptr, int id)
 {
     if (! clptr)
@@ -54,6 +56,7 @@ static void removeClient(Client **clptr, int id)
         }
 }
 
+/* Czyści listę klientów (zwalnia zasoby) */
 static void clearClientList(Client **clptr)
 {
     if (! clptr)
@@ -62,6 +65,7 @@ static void clearClientList(Client **clptr)
         removeClient(clptr, cp->id);
 }
 
+/* Zwraca klienta o podanym identyfikatorze. Jeżeli takowego nie ma, zwraca NULL */
 static Client *getClientById(Client *cl, int cid)
 {
     if (! cl)
@@ -77,6 +81,7 @@ static Client *getClientById(Client *cl, int cid)
 
 /* CHANNEL LIST SECTION */
 
+/* Dodaje nowy kanał do listy */
 static void addChannel(Channel **chlptr, char *name, char private)
 {
     if (! chlptr)
@@ -96,6 +101,7 @@ static void addChannel(Channel **chlptr, char *name, char private)
     (*chpp)->next = NULL;
 }
 
+/* Czyści listę kanałów, czyli zwalnia zasoby */
 static void clearChannelList(Channel **chlptr)
 {
     if (! chlptr)
@@ -121,6 +127,7 @@ static void clearChannelList(Channel **chlptr)
     }
 }
 
+/* Zwraca wskaźnik na kanał, którego nazwa jest 'name'. Jeśli w liście 'chl' takiego kanału nie ma, zwraca NULL */
 static Channel *getChannelByName(Channel *chl, char *name)
 {
     if (! name || ! chl)
@@ -131,6 +138,7 @@ static Channel *getChannelByName(Channel *chl, char *name)
     return NULL;
 }
 
+/* Dodaje klienta do listy połączonych do kanału */
 static void addClientToChannel(Channel *chptr, int cid)
 {
     ClientEntry **cepp = &(chptr->clients);
@@ -142,6 +150,7 @@ static void addClientToChannel(Channel *chptr, int cid)
     (*cepp)->next = NULL;
 }
 
+/* Usuwa klienta z listy połączonych do kanału */
 static void removeClientFromChannel(Channel *chptr, int cid)
 {
     if (! chptr)
@@ -161,6 +170,7 @@ static void removeClientFromChannel(Channel *chptr, int cid)
 
 /* MESSAGE HANDLERS SECTION */
 
+/* Dodaje nowego użytkownika. Jeśli użytkownik pod taką nazwą już istnieje, wysyła komunikat o błędzie */
 static void handleLogin(Message *msgbuf)
 {
     int cid = msgbuf->data.loginmsg.cid;
@@ -199,6 +209,7 @@ static void handleLogin(Message *msgbuf)
     }
 }
 
+/* Zwalnia zasoby po użytkowniku, który się wylogował */
 static void handleDisconnect(Message *msgbuf)
 {
     int cid = msgbuf->data.discmsg.cid;
@@ -212,6 +223,7 @@ static void handleDisconnect(Message *msgbuf)
     }
 }
 
+/* Realizuje polecenie "info", czyli wysyła listę dodatkowych komend serwera */
 static void handleInfo(Message *msgbuf)
 {
     int cid = msgbuf->data.srvmsg.cid;
@@ -224,6 +236,7 @@ static void handleInfo(Message *msgbuf)
         printf("info msg sent successfully to %d\n", cid);
 }
 
+/* Dodaje użytkownika do listy użytkowników zaproszonych do kanału prywatnego */
 static void addClientToInvited(Channel *channel, int cid)
 {
     if (! channel)
@@ -237,6 +250,7 @@ static void addClientToInvited(Channel *channel, int cid)
     (*cepp)->next = NULL;
 }
 
+/* Dołącza się do kanału o podanej nazwie. Jeśli kanał nie istnieje, to tworzy się nowy, a argument private wskazuje, czy nowo utworzony kanał będzie prywatny */
 static void handleJoinChannel(Message *msgbuf, int private)
 {
     int cid = msgbuf->data.chmsg.cid;
@@ -308,6 +322,7 @@ static void handleJoinChannel(Message *msgbuf, int private)
         printf("join channel confirmation sent successfully to %d\n", cid);
 }
 
+/* Wychodzi z kanału */
 static void handleLeaveChannel(Message *msgbuf)
 {
     int cid = msgbuf->data.chmsg.cid;
@@ -335,6 +350,7 @@ static void handleLeaveChannel(Message *msgbuf)
         printf("leave channel confirmation sent successfully to %d\n", cid);
 }
 
+/* Wysyła wiadomość prywatną do innego użytkownika */
 static void handleSendPrivateMessage(Message *msgbuf)
 {
     int cid = msgbuf->data.textmsg.cid;
@@ -382,6 +398,7 @@ static void handleSendPrivateMessage(Message *msgbuf)
         printf("priv msg confirmation sent successfully to %d\n", cid);
 }
 
+/* Przesyła wiadomość tekstową od użytkownika do wszystkich użytkowników na tym samym kanale */
 static void handleSendChannelMessage(Message *msgbuf)
 {
     int cid = msgbuf->data.textmsg.cid;
@@ -420,6 +437,7 @@ static void handleSendChannelMessage(Message *msgbuf)
         printf("chmsg confirmation sent successfully to %d\n", cid);
 }
 
+/* Obsługuje polecenie "users", czyli wysyła klientowi listę zalogowanych użytkowników */
 static void handleShowUsers(Message *msgbuf)
 {
     int cid = msgbuf->data.srvmsg.cid;
@@ -441,6 +459,7 @@ static void handleShowUsers(Message *msgbuf)
         printf("users stats successfully sent to %d\n", cid);
 }
 
+/* Obsługuje polecenie "channels", czyli wysyła użytkownikowi listę kanałów publicznych */
 static void handleShowChannels(Message *msgbuf)
 {
     int cid = msgbuf->data.srvmsg.cid;
@@ -476,12 +495,12 @@ static void handleShowChannels(Message *msgbuf)
 
 /* SPECIAL SERVER COMMANDS */
 
+/* Zaprosić klienta do kanału prywatnego i powiadomić go o tym */
 static void inviteClientToPrivateChannel(Message *msgbuf, char *username)
 {
     username = strdup(username);
     int cid = msgbuf->data.srvmsg.cid;
     Client *sender = getClientById(ClientList, cid);
-    msgbuf->type = CONFIRM_MSG;
     msgbuf->data.confmsg.confirmed = 0;
     if (! sender->channel)
     {
@@ -513,7 +532,8 @@ static void inviteClientToPrivateChannel(Message *msgbuf, char *username)
             {
                 msgbuf->data.confmsg.confirmed = 1;
                 addClientToInvited(channel, client->id);
-                sprintf(msgbuf->data.confmsg.text,
+                msgbuf->type = SRV_MSG;
+                sprintf(msgbuf->data.srvmsg.text,
                         "You've been invited to private channel %s\n", channel->name);
                 if (mq_send(client->mqdes, (char *)msgbuf, sizeof(Message), 0) < 0)
                     perror("send info that someone was invited");
@@ -527,12 +547,14 @@ static void inviteClientToPrivateChannel(Message *msgbuf, char *username)
         }
     }
     free(username);
+    msgbuf->type = CONFIRM_MSG;
     if (mq_send(sender->mqdes, (char *)msgbuf, sizeof(Message), 0) < 0)
         perror("send invite confirmation");
     else
         printf("invite confirmation sent successfully to %d\n", sender->id);
 }
 
+/* Wysyła klientowi listę kanałow prywatnych, do której jest zaproszony */
 static void showInvitations(Message *msgbuf)
 {
     int cid = msgbuf->data.srvmsg.cid;
@@ -566,6 +588,7 @@ static void showInvitations(Message *msgbuf)
 
 /* END SPECIAL SERVER COMMANDS */
 
+/* Obsługuje dodatkowe polecenia serwera */
 static void handleServerCommand(Message *msgbuf)
 {
     char *cmd = msgbuf->data.srvmsg.text;
@@ -604,6 +627,8 @@ static void handleServerCommand(Message *msgbuf)
 
 /* MAIN SECTION */
 
+/* Czyści zasoby i kończy wykonanie programu.
+   Ta funkcja również jest wywoływana przy przerwaniu z klawiatury */
 static void quit(int signum)
 {
     printf("exit\n");
