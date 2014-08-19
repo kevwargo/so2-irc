@@ -84,7 +84,7 @@ static void sendChannelMessage(Message *msgbuf, char *msg)
 {
     msgbuf->type = SEND_CHANNEL_MSG;
     msgbuf->data.textmsg.cid = getpid();
-    char *text = strtok(msg, " 	");
+    char *text = strtok(msg, "\0");
     if (! text)
     {
         safePrintf("no message to send to channel\n");
@@ -121,7 +121,7 @@ static void sendPrivateMessage(Message *msgbuf, char *msg)
         return;
         /* return 0; */
     }
-    char *text = strtok(NULL, " 	");
+    char *text = strtok(NULL, "\0");
     if (! text)
     {
         safePrintf("no text to user\n");
